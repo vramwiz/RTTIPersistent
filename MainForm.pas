@@ -6,17 +6,38 @@ uses
   Winapi.Windows, Winapi.Messages, System.SysUtils, System.Variants, System.Classes, Vcl.Graphics,
   Vcl.Controls, Vcl.Forms, Vcl.Dialogs, Vcl.StdCtrls, Vcl.ExtCtrls,RTTIPersistent;
 
+type
+  TSubItem = class(TPersistent)
+  private
+    FValue: Double;
+  published
+    property Value: Double read FValue write FValue;
+  end;
 
 type
   TSampleItem = class(TRTTIPersistentIni)
   private
-    FName    : string;
-    FEnabled : Boolean;
+    FName     : string;
+    FEnabled  : Boolean;
+    FAge      : Integer;
+    FScore    : Double;
+    FChar     : Char;
+    FKind     : TAlignment; // Enumå^
+    FFlags    : TFontStyles; // Setå^
+    FDate     : TDateTime;
+    FSubItem  : TSubItem;
   public
-
+    constructor Create;
   published
-    property Name    :  string   read FName    write FName;
-    property Enabled :   Boolean read FEnabled write FEnabled;
+    property Name    : string      read FName    write FName;
+    property Enabled : Boolean     read FEnabled write FEnabled;
+    property Age     : Integer     read FAge     write FAge;
+    property Score   : Double      read FScore   write FScore;
+    property Char    : Char        read FChar    write FChar;
+    property Kind    : TAlignment  read FKind    write FKind;
+    property Flags   : TFontStyles read FFlags   write FFlags;
+    property Date    : TDateTime   read FDate    write FDate;
+    property Sub     : TSubItem    read FSubItem write FSubItem;
   end;
 
 type
@@ -350,5 +371,22 @@ begin
    end;
 end;
 }
+
+{ TSampleItem }
+
+constructor TSampleItem.Create;
+begin
+  inherited;
+  FName    := 'Test Name';
+  FEnabled := True;
+  FAge     := 42;
+  FScore   := 99.9;
+  FChar    := 'A';
+  FKind    := taCenter;
+  FFlags   := [fsBold, fsItalic];
+  FDate    := EncodeDate(2023, 5, 10) + EncodeTime(15, 30, 0, 0);
+  FSubItem := TSubItem.Create;
+  FSubItem.Value := 123.456;
+end;
 
 end.

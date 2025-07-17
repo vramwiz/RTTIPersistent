@@ -53,9 +53,6 @@ begin
 - `Assign` は `TPersistent` ではなく、必要に応じて `TObjectList<T>` 型に対して別メソッドとして定義する必要があります（`AssignList` など）
 - `LoadFromFile` はファイルが存在しない場合は `Clear` しない方が自然ですが、ファイルが読み込まれた場合には `Clear` を呼ぶべきです
 
-## 利用ライブラリ（依存ユニット）
-
-- `StringListRtti`, `StringListEx`, `StringListKey`（RTTIベースの読込・書込を補助）
 
 ## ライセンス
 

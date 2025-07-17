@@ -18,11 +18,6 @@ unit RTTIPersistent;
     - TRTTIFormBounds       : 上記に加えてサイズ・WindowState を保存・復元
     - TRTTIPersistentIniList<T> : オブジェクトのリストをファイルで保存・読込
 
-  依存ユニット：
-    - StringListRtti       : オブジェクトと TStrings 間のRTTI変換機能
-    - StringListEx         : TStrings の拡張（ファイル読込など）
-    - StringListKey        : 複数の TStrings をキー付きで管理
-
 ******************************************************************************
 }
 
@@ -30,11 +25,19 @@ interface
 
 uses
   Windows, Messages, SysUtils, Classes, Graphics, Controls, Forms, Dialogs,
-  StdCtrls, ExtCtrls,StringListEx,StringListKey,System.Types,System.Generics.Collections;
+  StdCtrls, ExtCtrls,StringListEx,StringListKey,System.Types,System.Generics.Collections,
+  TypInfo,System.Rtti;
 
 
 type
 	TRTTIPersistent = class(TPersistent)
+	private
+		{ Private 宣言 }
+    // 指定された PPropInfo を用いて Source から Dest にプロパティの値をコピーする
+    procedure CopyPropValue(Dest, Source: TObject; Prop: PPropInfo);
+  protected
+    // 指定されたプロパティが書き込み可能か
+    function PropIsWritable(Prop: PPropInfo): Boolean;virtual;
 	public
 		{ Public 宣言 }
     procedure Assign(Source : TPersistent);override;
@@ -49,11 +52,15 @@ type
 	private
 		{ Private 宣言 }
     FFilename: string;
+    // InstanceをIni形式でシリアライズ化して Destに出力
+    procedure SerializeToStrings(Instance: TPersistent; Dest: TStrings);
+    // Ini形式の文字列リストからInstanceに入力
+    procedure DeserializeFromStrings(Instance: TPersistent; const Src: TStrings);
+    // INIファイルで誤解される特殊文字を適切にエスケープ する
+    function EscapeValueString(const Value: string): string;
+    // \n, \=, \;, \\ を元の文字列に戻す
+    function UnescapeValueString(const Value: string): string;
   protected
-    // INIファイルから読み込むデータを文字列リストから取得
-    procedure LoadFromStrings(ts : TStringListEx);virtual;
-    // INIファイルに保存するデータを 文字列リストへ追加
-    procedure SaveToStrings(ts : TStringListEx);virtual;
 	public
 		{ Public 宣言 }
     // ファイル読み込み
@@ -141,8 +148,6 @@ type
 
 
 implementation
-
-uses StringListRtti ;
 
 
 { TRTTIFormPosition }
@@ -243,101 +248,292 @@ end;
 
 { TRTTIPersistentIni }
 
+
 procedure TRTTIPersistentIni.LoadFromFile;
 var
-  tk : TStringListKey;
-  sn : string;
-  ti : TStringListRtti;
-  ts : TStringListEx;
+  SL: TStringList;
 begin
-  tk := TStringListKey.Create;
-  ti := TStringListRtti.Create;
-  ts := TStringListEx.Create;
+  SL := TStringList.Create;
   try
-    sn := FFilename;                     // ファイル名取得
-    if not FileExists(sn) then exit;     // 無い場合は処理しない
-    ts.LoadFromFile(sn);                 // INIファイル読み込み
-    LoadFromStrings(ts);                     // 下位クラスで読み込む
+    SL.LoadFromFile(FFilename, TEncoding.UTF8);
+    DeserializeFromStrings(Self, SL);
   finally
-    ts.Free;
-    ti.Free;
-    tk.Free
-  end;
-end;
-
-procedure TRTTIPersistentIni.LoadFromStrings(ts: TStringListEx);
-var
-  ti : TStringListRtti;
-begin
-  ti := TStringListRtti.Create;
-  try
-    if ts<>nil then begin
-      ti.Assign(ts);
-      ti.LoadFromObject(Self);
-    end;
-  finally
-    ti.Free;
+    SL.Free;
   end;
 end;
 
 procedure TRTTIPersistentIni.SaveToFile;
 var
-  tk : TStringListKey;
-  ts : TStringListEx;
-  ti : TStringListRtti;
-  sn : string;
+  SL: TStringList;
 begin
-  tk := TStringListKey.Create;
-  ti := TStringListRtti.Create;
-  ts := TStringListEx.Create;
+  SL := TStringList.Create;
   try
-    sn := FFilename;                     // ファイル名取得
-    SaveToStrings(ts);
-    ts.SaveToFile(sn);
-    //SaveToKey(tk);                       // 下位クラスでデータを保存
-    //tk.SaveToFile(sn);
+    SerializeToStrings(Self,SL);         // 自身をシリアライズ化
+    SL.SaveToFile(FFilename);            // 実ファイルに保存
   finally
-    ts.Free;
-    ti.Free;
-    tk.Free
+    SL.Free;
   end;
 end;
 
-procedure TRTTIPersistentIni.SaveToStrings(ts: TStringListEx);
+
+procedure TRTTIPersistentIni.SerializeToStrings(Instance: TPersistent;
+  Dest: TStrings);
 var
-  ti : TStringListRtti;
+  ctx: TRttiContext;
+  typ: TRttiInstanceType; // ← 型を明示的にキャスト;
+  prop: TRttiProperty;
+  val: TValue;
+  tmpSL: TStringList;
+  s: string;
 begin
-  ti := TStringListRtti.Create;
+  ctx := TRttiContext.Create;
   try
-    ti.SaveToObject(Self);
-    ts.Assign(ti);
+    typ := ctx.GetType(Instance.ClassType) as TRttiInstanceType;
+    for prop in typ.GetProperties do
+    begin
+      if not prop.IsReadable or not prop.IsWritable then Continue;
+      val := prop.GetValue(Instance);
+
+      case prop.PropertyType.TypeKind of
+        tkInteger, tkFloat, tkEnumeration,
+        tkChar, tkWChar, tkString, tkLString, tkWString, tkUString:
+          Dest.Add(prop.Name + '=' + TRTTIPersistentIni(Instance).EscapeValueString(val.ToString));
+
+        tkClass:
+          if val.IsObject and (val.AsObject is TPersistent) then
+          begin
+            tmpSL := TStringList.Create;
+            try
+              {
+              if val.AsObject is TRTTIPersistentIni then
+                SerializeToStrings(TRTTIPersistentIni(val.AsObject), tmpSL) // 再帰！
+              else
+                SerializeToStrings(TPersistent(val.AsObject), tmpSL); // 汎用変換
+              }
+              SerializeToStrings(TPersistent(val.AsObject), tmpSL); // 再帰！
+              s := tmpSL.Text;
+              s := TRTTIPersistentIni(Instance).EscapeValueString(s);
+              Dest.Add(prop.Name + '=' + s);
+            finally
+              tmpSL.Free;
+            end;
+          end;
+      end;
+    end;
   finally
-    ti.Free;
+    ctx.Free;
+  end;
+end;
+
+procedure TRTTIPersistentIni.DeserializeFromStrings(Instance: TPersistent;
+  const Src: TStrings);
+var
+  ctx       : TRttiContext;
+  typ: TRttiInstanceType; // ← 型を明示的にキャスト;
+  prop      : TRttiProperty;
+  I, P      : Integer;
+  Line      : string;
+  Key       : string;
+  ValueStr  : string;
+  Kind      : TTypeKind;
+  SubObj    : TObject;
+  tmpSL     : TStringList;
+  EnumVal   : Integer;
+begin
+  ctx := TRttiContext.Create;
+  try
+    typ := ctx.GetType(Instance.ClassType) as TRttiInstanceType;
+
+    for I := 0 to Src.Count - 1 do
+    begin
+      Line := Trim(Src[I]);
+      if Line = '' then Continue;
+
+      P := Pos('=', Line);
+      if P <= 0 then Continue;
+
+      Key := Trim(Copy(Line, 1, P - 1));
+      ValueStr := Copy(Line, P + 1, MaxInt);
+      ValueStr := TRTTIPersistentIni(Instance).UnescapeValueString(ValueStr);
+
+      prop := typ.GetProperty(Key);
+      if (prop = nil) or (not prop.IsWritable) then Continue;
+
+      Kind := prop.PropertyType.TypeKind;
+
+      case Kind of
+        tkInteger:
+          prop.SetValue(Instance, StrToIntDef(ValueStr, 0));
+
+        tkInt64:
+          prop.SetValue(Instance, StrToInt64Def(ValueStr, 0));
+
+        tkFloat:
+          prop.SetValue(Instance, StrToFloatDef(ValueStr, 0));
+
+        tkEnumeration:
+          begin
+            EnumVal := GetEnumValue(prop.PropertyType.Handle, ValueStr);
+            if EnumVal <> -1 then
+              prop.SetValue(Instance, TValue.FromOrdinal(prop.PropertyType.Handle, EnumVal));
+          end;
+
+        tkChar, tkWChar, tkString, tkLString, tkWString, tkUString:
+          prop.SetValue(Instance, ValueStr);
+
+        tkClass:
+          begin
+            SubObj := prop.GetValue(Instance).AsObject;
+            if Assigned(SubObj) and (SubObj is TPersistent) then
+            begin
+              tmpSL := TStringList.Create;
+              try
+                tmpSL.Text := ValueStr;
+                DeserializeFromStrings(TPersistent(SubObj), tmpSL); // 再帰！
+              finally
+                tmpSL.Free;
+              end;
+            end;
+          end;
+      end;
+    end;
+
+  finally
+    ctx.Free;
+  end;
+end;
+
+function TRTTIPersistentIni.EscapeValueString(const Value: string): string;
+var
+  i: Integer;
+  ch: Char;
+begin
+  Result := '';
+  for i := 1 to Length(Value) do
+  begin
+    ch := Value[i];
+    case ch of
+      '\': Result := Result + '\\';        // バックスラッシュ → エスケープ
+      ';': Result := Result + '\;';        // セミコロン → コメント防止
+      '=': Result := Result + '\=';        // イコール → key=value の誤認防止
+      #13: ;                               // CR は無視（LFとセットで処理）
+      #10: Result := Result + '\n';        // LF → 改行表現
+    else
+      Result := Result + ch;
+    end;
+  end;
+end;
+
+function TRTTIPersistentIni.UnescapeValueString(const Value: string): string;
+var
+  i: Integer;
+  ch: Char;
+begin
+  Result := '';
+  i := 1;
+  while i <= Length(Value) do
+  begin
+    ch := Value[i];
+    if ch = '\' then
+    begin
+      Inc(i);
+      if i > Length(Value) then
+        Break;  // エラー扱いせず終了
+
+      case Value[i] of
+        'n': Result := Result + #10;       // 改行
+        '=': Result := Result + '=';       // イコール
+        ';': Result := Result + ';';       // セミコロン
+        '\': Result := Result + '\';       // バックスラッシュ
+      else
+        // 不明なエスケープはそのまま出力
+        Result := Result + '\' + Value[i];
+      end;
+    end
+    else
+      Result := Result + ch;
+    Inc(i);
   end;
 end;
 
 
-
-
-{ TDMPersistent }
+{ TRTTIPersistent }
 
 procedure TRTTIPersistent.Assign(Source: TPersistent);
 var
-  a : TRTTIPersistent;
-  tk : TStringListRtti;
+  i: Integer;
+  Info: PTypeInfo;
+  Data: PTypeData;
+  Props: PPropList;
+  Prop: PPropInfo;
 begin
-  if Source is TRTTIPersistent then begin
-    a := TRTTIPersistent(Source);
-    tk := TStringListRtti.Create;
-    try
-      tk.SaveToObject(a);
-      tk.LoadFromObject(Self);
-    finally
-      tk.Free;
+  if not (Source is TRTTIPersistent) then
+  begin
+    inherited Assign(Source);
+    Exit;
+  end;
+
+  Info := Self.ClassInfo;
+  Data := GetTypeData(Info);
+  GetMem(Props, Data^.PropCount * SizeOf(PPropInfo));
+  try
+    GetPropInfos(Info, Props);
+    for i := 0 to Data^.PropCount - 1 do
+    begin
+      Prop := Props^[i];
+
+      // プロパティが保存対象かつ書き込み可能であることを確認
+      if not IsStoredProp(Source, Prop) then  Continue;
+      if not PropIsWritable(Prop)       then  Continue;
+      // プロパティ値の代入処理
+      CopyPropValue(Self, Source, Prop);
     end;
-  end
-  else begin
-    inherited;
+  finally
+    FreeMem(Props);
+  end;
+end;
+
+
+function TRTTIPersistent.PropIsWritable(Prop: PPropInfo): Boolean;
+begin
+  Result := Assigned(Prop) and Assigned(Prop^.SetProc);
+end;
+
+procedure TRTTIPersistent.CopyPropValue(Dest, Source: TObject; Prop: PPropInfo);
+var
+  Kind: TTypeKind;
+  SourceObj,DestObj: TObject;
+begin
+  if not Assigned(Prop) or not Assigned(Prop^.GetProc) or not Assigned(Prop^.SetProc) then
+    Exit;
+
+  Kind := Prop^.PropType^.Kind;
+
+  case Kind of
+    tkInteger, tkChar, tkEnumeration, tkSet:
+      SetOrdProp(Dest, Prop, GetOrdProp(Source, Prop));
+
+    tkFloat:
+      SetFloatProp(Dest, Prop, GetFloatProp(Source, Prop));
+
+    tkString, tkLString, tkUString, tkWString:
+      SetStrProp(Dest, Prop, GetStrProp(Source, Prop));
+
+    tkInt64:
+      SetInt64Prop(Dest, Prop, GetInt64Prop(Source, Prop));
+
+    tkClass:
+      begin
+        // クラス型の場合は再帰的な Assign を試みる
+        SourceObj := GetObjectProp(Source, Prop);
+        DestObj   := GetObjectProp(Dest, Prop);
+        if (SourceObj is TPersistent) and (DestObj is TPersistent) then
+          TPersistent(DestObj).Assign(TPersistent(SourceObj))
+        else
+          SetObjectProp(Dest, Prop, SourceObj);  // 単純参照コピー
+      end;
+
+    // 他の型（tkMethod, tkVariantなど）は基本的に無視
   end;
 end;
 
@@ -410,57 +606,75 @@ end;
 
 procedure TRTTIPersistentIniList<T>.LoadFromFile;
 var
-  tk : TStringListKey;
-  sn : string;
-  i : Integer;
-  ti : TStringListRtti;
-  ts : TStringListEx;
-  d : TRTTIPersistentIni;
+  SL, ItemSL: TStringList;
+  i: Integer;
+  Line: string;
+  Item: T;
 begin
-  tk := TStringListKey.Create;
-  ti := TStringListRtti.Create;
+  SL := TStringList.Create;
+  ItemSL := TStringList.Create;
   try
-    sn := FFilename;                   // ファイル名取得
-    if not FileExists(sn) then exit;     // 無い場合は処理しない
-    tk.LoadFromFile(sn);                 // INIファイル読み込み
-    i := 0;
-    Clear();
-    while True do begin
-      ts := tk.Values[IntToStr(i)];
-      if ts = nil then break;
-      ti.Assign(ts);
-      d := AddNew;
-      ti.LoadFromObject(d);
-      //ti.LoadFromObject(AddNew);
-      Inc(i);
+    SL.LoadFromFile(FFilename, TEncoding.UTF8);
+    Clear;
+
+    for i := 0 to SL.Count - 1 do
+    begin
+      Line := SL[i].Trim;
+      if (Line <> '') and (Line[1] = '[') then
+      begin
+        // セクション開始 → それまでの内容を登録
+        if ItemSL.Count > 0 then
+        begin
+          Item := AddNew;
+          Item.DeserializeFromStrings(Item, ItemSL);
+          ItemSL.Clear;
+        end;
+      end
+      else
+        ItemSL.Add(Line);
     end;
+
+    // 最後の要素も追加
+    if ItemSL.Count > 0 then
+    begin
+      Item := AddNew;
+      Item.DeserializeFromStrings(Item, ItemSL);
+    end;
+
   finally
-    ti.Free;
-    tk.Free
+    ItemSL.Free;
+    SL.Free;
   end;
 end;
 
 
 procedure TRTTIPersistentIniList<T>.SaveToFile;
 var
-  tk : TStringListKey;
-  ti : TStringListRtti;
-  sn : string;
+  SL, ItemSL: TStringList;
   i: Integer;
+  SectionName: string;
+  Item: T;
 begin
-  tk := TStringListKey.Create;
-  ti := TStringListRtti.Create;
+  SL := TStringList.Create;
+  ItemSL := TStringList.Create;
   try
-    sn := FFilename;                   // ファイル名取得
-    for i := 0 to Count-1 do begin
-      ti.SaveToObject(Items[i]);
-      tk.Add(IntToStr(i),ti);
+    for i := 0 to Count - 1 do
+    begin
+      Item := Items[i];
+      SectionName := Format('[%d]', [i]);
+      SL.Add(SectionName);                   // セクション見出し
+
+      ItemSL.Clear;
+      Item.SerializeToStrings(Item,ItemSL);  // 自前のRTTI関数で出力
+      SL.AddStrings(ItemSL);
     end;
-    tk.SaveToFile(sn);
+
+    SL.SaveToFile(FFilename, TEncoding.UTF8);
   finally
-    ti.Free;
-    tk.Free
+    ItemSL.Free;
+    SL.Free;
   end;
 end;
+
 
 end.

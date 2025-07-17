@@ -3,10 +3,10 @@ program RTTIPersistentSample;
 uses
   Vcl.Forms,
   MainForm in 'MainForm.pas' {FormMain},
-  RTTIPersistent in 'RTTIPersistent.pas',
   StringListRtti in 'StringListRtti.pas',
   StringListEx in 'StringListEx.pas',
-  StringListKey in 'StringListKey.pas';
+  StringListKey in 'StringListKey.pas',
+  RTTIPersistent in 'RTTIPersistent.pas';
 
 {$R *.res}
 

@@ -25,7 +25,6 @@ object FormMain: TFormMain
     Align = alBottom
     ScrollBars = ssVertical
     TabOrder = 0
-    ExplicitTop = 109
   end
   object Panel1: TPanel
     Left = 0
@@ -42,10 +41,6 @@ object FormMain: TFormMain
       Height = 113
       Align = alClient
       TabOrder = 0
-      ExplicitLeft = 286
-      ExplicitTop = -6
-      ExplicitWidth = 224
-      ExplicitHeight = 136
       object Button3: TButton
         Left = 1
         Top = 87
@@ -55,9 +50,6 @@ object FormMain: TFormMain
         Caption = #8593#12288#12501#12449#12452#12523#12363#12425#35501#12415#36796#12415
         TabOrder = 0
         OnClick = Button3Click
-        ExplicitLeft = 48
-        ExplicitTop = 104
-        ExplicitWidth = 75
       end
       object Panel6: TPanel
         Left = 1
@@ -67,9 +59,6 @@ object FormMain: TFormMain
         Align = alLeft
         BevelOuter = bvNone
         TabOrder = 1
-        ExplicitLeft = 9
-        ExplicitTop = 9
-        ExplicitHeight = 109
         object ListBox2: TListBox
           Left = 0
           Top = 0
@@ -79,8 +68,6 @@ object FormMain: TFormMain
           ItemHeight = 13
           TabOrder = 0
           OnClick = ListBox2Click
-          ExplicitLeft = 4
-          ExplicitTop = -6
         end
       end
       object CheckBox2: TCheckBox
@@ -106,8 +93,6 @@ object FormMain: TFormMain
         Align = alTop
         Caption = 'To'
         TabOrder = 4
-        ExplicitLeft = 2
-        ExplicitTop = 9
       end
     end
     object Panel3: TPanel
@@ -117,9 +102,6 @@ object FormMain: TFormMain
       Height = 113
       Align = alLeft
       TabOrder = 1
-      ExplicitLeft = 191
-      ExplicitTop = -6
-      ExplicitHeight = 136
       object Button1: TButton
         Left = 1
         Top = 1
@@ -129,8 +111,6 @@ object FormMain: TFormMain
         Caption = #20195#20837' ->'
         TabOrder = 0
         OnClick = Button1Click
-        ExplicitLeft = -3
-        ExplicitTop = -3
       end
     end
     object Panel4: TPanel
@@ -140,9 +120,6 @@ object FormMain: TFormMain
       Height = 113
       Align = alLeft
       TabOrder = 2
-      ExplicitLeft = -5
-      ExplicitTop = -6
-      ExplicitHeight = 136
       object Button2: TButton
         Left = 1
         Top = 87
@@ -152,9 +129,6 @@ object FormMain: TFormMain
         Caption = #8595#12288#12501#12449#12452#12523#12395#20445#23384
         TabOrder = 0
         OnClick = Button2Click
-        ExplicitLeft = 64
-        ExplicitTop = 104
-        ExplicitWidth = 75
       end
       object Panel5: TPanel
         Left = 1
@@ -164,8 +138,6 @@ object FormMain: TFormMain
         Align = alLeft
         BevelOuter = bvNone
         TabOrder = 1
-        ExplicitTop = 1
-        ExplicitHeight = 109
         object ListBox1: TListBox
           Left = 0
           Top = 0
@@ -175,9 +147,6 @@ object FormMain: TFormMain
           ItemHeight = 13
           TabOrder = 0
           OnClick = ListBox1Click
-          ExplicitTop = -28
-          ExplicitWidth = 121
-          ExplicitHeight = 97
         end
         object Panel7: TPanel
           Left = 0
@@ -187,7 +156,6 @@ object FormMain: TFormMain
           Align = alBottom
           BevelOuter = bvNone
           TabOrder = 1
-          ExplicitTop = 60
           object Button4: TButton
             Left = 0
             Top = 0
@@ -197,7 +165,6 @@ object FormMain: TFormMain
             Caption = '+'
             TabOrder = 0
             OnClick = Button4Click
-            ExplicitTop = -6
           end
           object Button5: TButton
             Left = 33
@@ -208,9 +175,6 @@ object FormMain: TFormMain
             Caption = '-'
             TabOrder = 1
             OnClick = Button5Click
-            ExplicitLeft = 8
-            ExplicitWidth = 33
-            ExplicitHeight = 34
           end
         end
       end
