@@ -25,7 +25,7 @@ interface
 
 uses
   Windows, Messages, SysUtils, Classes, Graphics, Controls, Forms, Dialogs,
-  StdCtrls, ExtCtrls,StringListEx,StringListKey,System.Types,System.Generics.Collections,
+  StdCtrls, ExtCtrls,System.Types,System.Generics.Collections,
   TypInfo,System.Rtti;
 
 
