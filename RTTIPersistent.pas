@@ -291,6 +291,8 @@ begin
     typ := ctx.GetType(Instance.ClassType) as TRttiInstanceType;
     for prop in typ.GetProperties do
     begin
+      // PublishedˆÈŠO‚Í‚ÍœŠO
+      if prop.Visibility <> mvPublished then Continue;
       if not prop.IsReadable or not prop.IsWritable then Continue;
       val := prop.GetValue(Instance);
 
