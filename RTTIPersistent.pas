@@ -60,6 +60,7 @@ type
     function EscapeValueString(const Value: string): string;
     // \n, \=, \;, \\ を元の文字列に戻す
     function UnescapeValueString(const Value: string): string;
+    function TryLoadText(SL: TStringList; const FileName: string): Boolean;
   protected
 	public
 		{ Public 宣言 }
@@ -75,6 +76,7 @@ type
   TRTTIPersistentIniList<T: TRTTIPersistentIni, constructor> = class(TObjectList<T>)
   private
     FFilename: string;
+    function TryLoadText(SL: TStringList; const FileName: string): Boolean;
   public
     procedure Assign(Source: TObjectList<T>);
     // 要素追加
@@ -253,10 +255,12 @@ procedure TRTTIPersistentIni.LoadFromFile;
 var
   SL: TStringList;
 begin
+  if not FileExists(FFilename) then Exit;
+
   SL := TStringList.Create;
   try
-    SL.LoadFromFile(FFilename, TEncoding.UTF8);
-    DeserializeFromStrings(Self, SL);
+    if TryLoadText(SL,FFilename) then
+      DeserializeFromStrings(Self, SL);
   finally
     SL.Free;
   end;
@@ -268,8 +272,8 @@ var
 begin
   SL := TStringList.Create;
   try
-    SerializeToStrings(Self,SL);         // 自身をシリアライズ化
-    SL.SaveToFile(FFilename);            // 実ファイルに保存
+    SerializeToStrings(Self, SL);                   // 自身をシリアライズ化
+    SL.SaveToFile(FFilename, TEncoding.UTF8);       // 明示的に UTF-8 で保存
   finally
     SL.Free;
   end;
@@ -324,6 +328,35 @@ begin
     end;
   finally
     ctx.Free;
+  end;
+end;
+
+function TRTTIPersistentIni.TryLoadText(SL: TStringList;
+  const FileName: string): Boolean;
+begin
+  Result := False;
+
+  if not FileExists(FileName) then
+    Exit;
+
+  try
+    SL.LoadFromFile(FileName, TEncoding.UTF8);
+    Result := True;
+  except
+    on E: Exception do
+      OutputDebugString(PChar('UTF-8 読み込み失敗: ' + E.Message));
+  end;
+
+  if not Result then
+  begin
+    try
+      SL.LoadFromFile(FileName, TEncoding.Default); // fallback: Shift-JISなど
+      Result := True;
+      OutputDebugString('Shift-JIS で再読み込み成功');
+    except
+      on E: Exception do
+        OutputDebugString(PChar('Shift-JIS 読み込みも失敗: ' + E.Message));
+    end;
   end;
 end;
 
@@ -613,10 +646,12 @@ var
   Line: string;
   Item: T;
 begin
+  if not FileExists(FFilename) then exit;
+
   SL := TStringList.Create;
   ItemSL := TStringList.Create;
   try
-    SL.LoadFromFile(FFilename, TEncoding.UTF8);
+    if not TryLoadText(SL,FFilename) then exit;
     Clear;
 
     for i := 0 to SL.Count - 1 do
@@ -678,5 +713,34 @@ begin
   end;
 end;
 
+
+function TRTTIPersistentIniList<T>.TryLoadText(SL: TStringList;
+  const FileName: string): Boolean;
+begin
+  Result := False;
+
+  if not FileExists(FileName) then
+    Exit;
+
+  try
+    SL.LoadFromFile(FileName, TEncoding.UTF8);
+    Result := True;
+  except
+    on E: Exception do
+      OutputDebugString(PChar('UTF-8 読み込み失敗: ' + E.Message));
+  end;
+
+  if not Result then
+  begin
+    try
+      SL.LoadFromFile(FileName, TEncoding.Default); // fallback: Shift-JISなど
+      Result := True;
+      OutputDebugString('Shift-JIS で再読み込み成功');
+    except
+      on E: Exception do
+        OutputDebugString(PChar('Shift-JIS 読み込みも失敗: ' + E.Message));
+    end;
+  end;
+end;
 
 end.
